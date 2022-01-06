@@ -16,7 +16,7 @@ hooks.set("_default", {
       return tween.elem[tween.prop];
     }
 
-    result = jQuery.css(tween.elem, tween.prop, "");
+    result = css(tween.elem, tween.prop, "");
 
     // Empty strings, null, undefined and "auto" are converted to 0.
     return !result || result === "auto" ? 0 : result;
