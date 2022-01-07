@@ -26,12 +26,11 @@ hooks.set("_default", {
       step[prop](elem, prop, now, unit);
     } else if (
       elem.nodeType === 1 &&
-      (cssHooks[prop] ||
-        elem.style[finalPropName(prop)] != null)
+      (cssHooks[prop] || elem.style[finalPropName(prop)] != null)
     ) {
       style(elem, prop, now + unit);
     } else {
-      elem[prop] = now
+      elem[prop] = now;
     }
   },
 });
