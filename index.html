@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title></title>
+</head>
+
+<body>
+  <div class="div">
+    hello world
+  </div>
+  <style>
+    .div {
+      display: none;
+    }
+  </style>
+  <button>click</button>
+  <script src="https://unpkg.com/jquery">
+  </script>
+  <script src="https://unpkg.com/kijs/dist/kijs.umd.js"></script>
+  <script>
+    $("button").click(() => {
+      $(".div").animate({
+        height: "toggle"
+      })
+    })
+  </script>
+</body>
+
+</html>

@@ -1,5 +1,9 @@
 const cacheDisplayElement = new Map<HTMLElement, string>();
 
+export function getDisplayElementInCache(elem: HTMLElement): string |void {
+  return cacheDisplayElement.get(elem)
+}
+
 export default function showHide<T>(elements: LikeArray<T>, show = false): LikeArray<T> {
   const values: (string | void)[] = []
   // scan values
@@ -18,7 +22,7 @@ export default function showHide<T>(elements: LikeArray<T>, show = false): LikeA
           elem.style.display = ""
         }
         
-        if (elem.style.display === "" && isHoddenWithinTree(elem)) {
+        if (elem.style.display === "" && isHiddenWithinTree(elem)) {
           values[index] = getDefaultDisplay(elem)
         }
       }

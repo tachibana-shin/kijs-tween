@@ -1,49 +1,46 @@
 const hooks = new Map<
   string,
   {
-    get: (tween: Tween) => number | string;
-    set: (tween: Tween) => void;
+    get: <T = HTMLElement>(tween: Tween) => number | string;
+    set: <T = HTMLElement>(tween: Tween) => void;
   }
 >();
 
 hooks.set("_default", {
-  get(tween) {
+  get({ elem, prop }) {
     var result;
     if (
-      tween.elem.nodeType !== 1 ||
-      (tween.elem[tween.prop] != null && tween.elem.style[tween.prop] == null)
+      elem.nodeType !== 1 ||
+      (elem[prop] != null && elem.style[prop] == null)
     ) {
-      return tween.elem[tween.prop];
+      return elem[prop];
     }
 
-    result = css(tween.elem, tween.prop, "");
+    result = css(elem, prop, "");
 
     // Empty strings, null, undefined and "auto" are converted to 0.
     return !result || result === "auto" ? 0 : result;
   },
-  set(tween) {
-    // Use step hook for back compat.
-    // Use cssHook if its there.
-    // Use .style if available and use plain properties where available.
-    if (Tween.step[tween.prop]) {
-      Tween.step[tween.prop](tween);
+  set({ elem, prop, now, unit }) {
+    if (step[prop]) {
+      step[prop](elem, prop, now, unit);
     } else if (
-      tween.elem.nodeType === 1 &&
-      (jQuery.cssHooks[tween.prop] ||
-        tween.elem.style[finalPropName(tween.prop)] != null)
+      elem.nodeType === 1 &&
+      (cssHooks[prop] ||
+        elem.style[finalPropName(prop)] != null)
     ) {
-      jQuery.style(tween.elem, tween.prop, tween.now + tween.unit);
+      style(elem, prop, now + unit);
     } else {
-      tween.elem[tween.prop] = tween.now;
+      elem[prop] = now
     }
   },
 });
 
 each(["scrollTop", "scrollLeft"], (prop) => {
   hooks.set(prop, {
-    set(tween) {
-      if (tween.elem.nodeType && tween.elem.parentNode) {
-        tween.elem[prop] = tween.now;
+    set(elem, prop, nows) {
+      if (elem.nodeType && elem.parentNode) {
+        elem[prop] = nows[prop];
       }
     },
   });
