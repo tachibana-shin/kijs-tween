@@ -1,3 +1,5 @@
+import { css } from "kijs";
+
 export default function isHiddenWithinTree(elem: HTMLElement): boolean {
   // return true if style == "none" or element is exists in DOM and computedStyle.display == "none"
   return (

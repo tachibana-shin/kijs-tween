@@ -1,28 +1,40 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
+  getAll as getAllByTweenjs,
   Tween as TweenByTweenjs,
   update as updateByTweenjs,
-  getAll as getAllByTweenjs,
-  Easing,
 } from "@tweenjs/tween.js";
+import { adjustCSS, css, cssNumber, extend, Kijs } from "kijs";
 
-type ValueOrArray<T> = T | T[];
-type Options<El> = {
-  duration: keyof speeds | number = "_default";
-  easing: ((k: number) => number) | keyof easings;
-  queue?: boolean | string;
-  specialEasing?: {
-    [prop: keyof Props]: ((k: number) => number) | string;
+import isHiddenWithinTree from "../helpers/isHiddenWithinTree";
+import showHide, { getDisplayElementInCache } from "../helpers/showHide";
+import propHooks from "../hooks/propHooks";
+import easings from "../static/easings";
+import speeds from "../static/speeds";
+
+type Options<El = any> = {
+  readonly duration: keyof typeof speeds | number;
+  readonly easing: ((k: number) => number) | string;
+  readonly queue?: boolean | string;
+  readonly specialEasing?: {
+    readonly [prop: string]: ((k: number) => number) | string;
   };
-  step?: (this: El, now: number, tween: Tween) => void;
-  progress?: (this: El, animation: Promise<void>, remainingMs: number) => void;
-  complete?: (this: El) => void;
-  start?: (this: El, animation: Promise) => void;
+  readonly step?: (this: El, now: number, tween: Tween<El>) => void;
+  readonly progress?: (
+    this: El,
+    tween: Tween<El>,
+    animation: number,
+    remainingMs: number
+  ) => void;
+  readonly complete?: (this: El) => void;
+  readonly start?: (this: El, animation: Promise<void>) => void;
 
-  done?: () => void;
-  fail?: () => void;
-  always?: () => void;
+  readonly done?: () => void;
+  readonly fail?: () => void;
+  readonly always?: () => void;
 };
 
+// eslint-disable-next-line functional/no-let
 let isRunning = false;
 function _update() {
   if (getAllByTweenjs().length === 0) {
@@ -39,16 +51,28 @@ function _update() {
 function update() {
   if (isRunning === false) _update();
 }
-class Tween<El extends any> extends TweenByTweenjs {
-  readonly elem: HTMLElement;
-  readonly units: Record<keyof Props, string>;
+class Tween<El extends any> {
+  // eslint-disable-next-line functional/prefer-readonly-type
+  readonly tween: TweenByTweenjs<{ value: number }>;
+
+  readonly elem: El;
   readonly start: number;
   readonly end: number;
   readonly unit: string;
+  readonly dur: number;
   readonly options: Options<El>;
+  // eslint-disable-next-line functional/prefer-readonly-type
   now: number;
   readonly prop: string;
   readonly promise: Promise<void>;
+  readonly then: () => void | PromiseLike<void>;
+  readonly catch: () => void | PromiseLike<void>;
+  readonly finally: () => void | PromiseLike<void>;
+
+  // eslint-disable-next-line functional/prefer-readonly-type
+  onUpdateCbs?: Set<(tween: this) => void>;
+  // eslint-disable-next-line functional/prefer-readonly-type
+  onStartCbs?: Set<(tween: this) => void>;
 
   constructor(
     elem: El,
@@ -67,35 +91,48 @@ class Tween<El extends any> extends TweenByTweenjs {
       () => this.cur()
     );
 
-    this.start = adjust.start;
+    this.start = this.now = adjust.start;
     this.end = adjust.end;
-    this.unit = adjust.unit || (cssNumber[prop] ? "" : "px");
+    this.unit = adjust.unit || ((cssNumber as any)[prop] ? "" : "px");
 
+    // eslint-disable-next-line functional/no-let
     let { duration } = options;
     if (typeof duration === "string") {
       duration = speeds[duration];
     }
 
-    super({
+    this.dur = duration;
+    this.tween = new TweenByTweenjs({
       value: this.start,
     });
-    this.to(
+    this.tween.to(
       {
         value: this.end,
       },
       duration
     );
 
-    const easing = options.specialEasing[prop] || options.easing;
-    this.easing(typeof easing === "string" ? easings[easing] : easing);
-    this.onUpdate(({ value }) => {
+    const easing = options.specialEasing?.[prop] || options.easing;
+    this.tween.easing(
+      typeof easing === "string"
+        ? // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          easings.get(easing) || easings.get("_default")!
+        : easing
+    );
+    this.tween.onUpdate(({ value }) => {
       this.now = value;
       this.set();
+
+      // call event;
+      this.onUpdateCbs?.forEach((cb) => cb(this));
+    });
+    this.tween.onStart(() => {
+      this.onStartCbs?.forEach((cb) => cb(this));
     });
 
-    this.promise = new Promise((res, rej) => {
-      this.onComplete(() => resolve());
-      this.onStop(() => reject());
+    this.promise = new Promise((resolve, reject) => {
+      this.tween.onComplete(() => resolve());
+      this.tween.onStop(() => reject());
     });
     this.then = this.promise.then.bind(this.promise);
     this.catch = this.promise.catch.bind(this.promise);
@@ -104,35 +141,59 @@ class Tween<El extends any> extends TweenByTweenjs {
     // call if is not of queue this.start();
   }
 
-  cur(prop: string) {
-    return (propHooks.get(prop)?.get || propHooks.get("_default").get)!(this);
+  cur(): number {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    return (propHooks.get(this.prop)?.get || propHooks.get("_default")!.get!)(
+      this
+    );
   }
-  set(prop: string, value: number) {
+  set() {
     this.options.step?.call(this.elem, this.now, this);
 
-    (propHopks.get(prop)?.set || propHooks.get("_default").set)!(this);
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    (propHooks.get(this.prop)?.set || propHooks.get("_default")!.set!)(this);
+  }
+
+  onUpdate(cb: (tween: this) => void): this {
+    if (!this.onUpdateCbs) {
+      this.onUpdateCbs = new Set();
+    }
+    this.onUpdateCbs.add(cb);
+
+    return this;
+  }
+  onStart(cb: (tween: this) => void): this {
+    if (!this.onStartCbs) {
+      this.onStartCbs = new Set();
+    }
+    this.onStartCbs.add(cb);
+
+    return this;
   }
 }
 
 const rfxtypes = /^(?:toggle|show|hide)$/;
 function createTweensByProps(
-  el: any,
+  elem: any,
   props: {
-    [key: string]: number | string;
+    readonly [key: string]: number | string;
   },
-  options: Options
+  options: Options<any>
 ): {
-  promise: Promise<void>;
-  tweens: Tween[];
+  readonly promise: Promise<void>;
+  readonly tweens?: readonly Tween<any>[];
 } {
-  const tweens = [];
+  // eslint-disable-next-line functional/prefer-readonly-type
+  const tweens: Tween<any>[] = [];
   const isBox = "width" in props || "height" in props; // is enable overflow
   const isHidden = elem.nodeType && isHiddenWithinTree(elem) === false;
+  // eslint-disable-next-line functional/no-let
   let enableModeFx = false; // is enable display
-  const valueStylesBackup: typeof props = {};
+  const valueStylesBackup: Partial<typeof props> = {};
 
+  // eslint-disable-next-line functional/no-loop-statement
   for (const prop in props) {
-    if (rfxtypes.exec(props[prop])) {
+    if (rfxtypes.exec(props[prop] + "")) {
       const type =
         props[prop] === "toggle" ? (isHidden ? "show" : "hide") : props[prop];
 
@@ -147,31 +208,46 @@ function createTweensByProps(
       if (type === "show") {
         // no set to 0
         // get value from backup
+        // eslint-disable-next-line functional/immutable-data
         valueStylesBackup[prop] = elem.style[prop] || "";
         const valueTo = css(elem, prop); // get style of me
-        tweens.push(new Tween(elem, prop, valueTo, options));
+        if (valueTo !== void 0) {
+          // eslint-disable-next-line functional/immutable-data
+          tweens.push(new Tween(elem, prop, valueTo, options));
+        }
       } else {
+        // eslint-disable-next-line functional/immutable-data
         valueStylesBackup[prop] = elem.style[prop] || "";
 
+        // eslint-disable-next-line functional/immutable-data
         tweens.push(new Tween(elem, prop, 0, options));
       }
+    } else {
+      // eslint-disable-next-line functional/immutable-data
+      tweens.push(new Tween(elem, prop, props[prop], options));
     }
-
-    tweens.push(new Tween(elem, prop, options, props[prop]));
   }
 
   if (options.progress) {
-    tweens[0]?.onProgress((tween) => {
+    tweens[0]?.onUpdate((tween) => {
       options.progress?.call(
-        el,
+        tween.elem,
+        tween,
         tween.now / tween.end,
-        tween.duration() * (1 - tween.now / tween.end)
+        tween.dur * (1 - tween.now / tween.end)
       );
     });
   }
 
+  const promise = Promise.all(tweens)
+    .finally(() => options.complete?.call(elem))
+    .then(() => options.done?.call(elem))
+    .catch(() => options.fail?.call(elem))
+    .finally(() => options.always?.call(elem));
+
   // / before start
-  let overflowsBackup;
+  // eslint-disable-next-line functional/no-let
+  let overflowsBackup: readonly string[] | void;
   if (isBox) {
     // set overflow hidden on start
     tweens[0]?.onStart(() => {
@@ -182,17 +258,22 @@ function createTweensByProps(
         elem.style.overflowY || "",
       ];
 
+      // eslint-disable-next-line functional/immutable-data
       elem.style.overflow = "hidden";
+      // eslint-disable-next-line functional/immutable-data
       elem.style.overflowX = elem.style.overflowY = "";
     });
     promise.finally(() => {
-      // restore
-      [elem.style.overflow, elem.style.overflowX, elem.style.overflowY] =
-        overflowsBackup;
-      overflowsBackup = void 0;
+      if (overflowsBackup) {
+        // restore
+        [elem.style.overflow, elem.style.overflowX, elem.style.overflowY] =
+          overflowsBackup;
+        overflowsBackup = void 0;
+      }
     });
   }
-  let displayBackup;
+  // eslint-disable-next-line functional/no-let
+  let displayBackup: string | void;
   if (enableModeFx) {
     /* displayBackup = getDisplayElementInCache()
 		const display = css( elem, "display" );
@@ -227,7 +308,8 @@ function createTweensByProps(
     })*/
 
     tweens[0]?.onStart(() => {
-      displayBackup = getDisplayElementInCache(); // never "none"
+      displayBackup = elem.nodeType && getDisplayElementInCache(elem); // never "none"
+      // eslint-disable-next-line functional/no-let
       let display = css(elem, "display");
       if (display === "none") {
         if (displayBackup) {
@@ -241,6 +323,7 @@ function createTweensByProps(
       }
 
       if (display === "inline") {
+        // eslint-disable-next-line functional/immutable-data
         elem.style.display = "inline-block";
       }
 
@@ -248,20 +331,16 @@ function createTweensByProps(
     });
     promise.finally(() => {
       if (isHidden) {
+        // eslint-disable-next-line functional/immutable-data
         elem.style.display = displayBackup;
       } else {
         showHide([elem], false);
       }
     });
   }
-  const promise = Promise.all(tweens)
-    .finally(() => options.complete.call(el))
-    .then(() => options.done.call(el))
-    .catch(() => options.fail.call(el))
-    .finally(() => options.always.call(el));
 
   if (options.start) {
-    tweens[0]?.onStart((tween) => options.start?.call(elem, tweens[0]));
+    tweens[0]?.onStart(() => options.start?.call(elem, promise));
   }
 
   // startTweens(tweens);
@@ -271,25 +350,38 @@ function createTweensByProps(
 function startTweens(
   tweens: ReturnType<typeof createTweensByProps>["tweens"]
 ): void {
-  tweens.forEach((tween) => tween.start());
+  tweens?.forEach((tween) => tween.tween.start());
 
   update();
 }
 
 const storeWeakAnimate = new WeakMap<
   any,
-  Map<string, Set<Props | (() => void | Promise<void>)>>
+  // eslint-disable-next-line functional/prefer-readonly-type
+  Map<
+    string,
+    // eslint-disable-next-line functional/prefer-readonly-type
+    Set<
+      | {
+          readonly props: Record<string, string | number>;
+          readonly options: Options<any>;
+        }
+      | (() => void | Promise<void>)
+    >
+  >
 >();
 const storeWeakTweenPropsRunning = new WeakMap<
   any,
+  // eslint-disable-next-line functional/prefer-readonly-type
   Set<ReturnType<typeof createTweensByProps>>
 >();
 
 function initWeakAnimate(elem: any, queueName: string): void {
   if (storeWeakAnimate.has(elem) === false) {
     storeWeakAnimate.set(elem, new Map());
-  }
+  } // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   if (storeWeakAnimate.get(elem)!.has(queueName) === false) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     storeWeakAnimate.get(elem)!.set(queueName, new Set());
   }
 }
@@ -299,32 +391,38 @@ function initWeakTweenPropsRunning(elem: any) {
   }
 }
 function startTweenQueueInStore(elem: any, queueName: string): void {
-  if (storeWeakAnimate.get(elem)!.get(queueName)!.size > 0) {
+  if (
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    storeWeakAnimate.get(elem)!.has(queueName) &&
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    storeWeakAnimate.get(elem)!.get(queueName)!.size > 0
+  ) {
     /* if (storeWeakTweenPropsRunning.has(elem)) {
       // call fs
     } else */ {
-      const props = storeWeakAnimate
-        .get(elem)!
-        .get(queueName)!
-        .values()
-        .next().value;
+      const argTween = Array.from(
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        storeWeakAnimate.get(elem)!.get(queueName)!.values()
+      )[0];
 
       const tweenProps =
-        typeof props === "function"
-          ? { promise: props() }
-          : createTweensByProps(elem, props);
+        typeof argTween === "function"
+          ? { promise: argTween() || Promise.resolve() }
+          : createTweensByProps(elem, argTween.props, argTween.options);
 
       initWeakTweenPropsRunning(elem);
-
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       storeWeakTweenPropsRunning.get(elem)!.add(tweenProps);
 
       tweenProps.promise.finally(() => {
         // call next
         // delete now
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         storeWeakTweenPropsRunning.get(elem)!.delete(tweenProps);
 
         // clear cache
-        if (storeWeakTweenPropsRunning.get(elem)?.size < 1) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        if (storeWeakTweenPropsRunning.get(elem)!.size < 1) {
           storeWeakTweenPropsRunning.delete(elem);
         }
 
@@ -332,30 +430,67 @@ function startTweenQueueInStore(elem: any, queueName: string): void {
         startTweenQueueInStore(elem, queueName);
       });
 
-      startTweens(tweenProps.props);
+      startTweens(tweenProps.tweens);
     }
     // start it -->
   }
 }
 
-Kijs.prototype.animate = function (props, duration, easing, complete) {
-  const options = extend(
-    {
-      duration: "_default",
-      easing: "_default",
-      queue: true,
-    },
-    typeof duration !== "object"
-      ? {
-          duration,
-          easing,
+function installer(Ki: typeof Kijs) {
+  // eslint-disable-next-line functional/immutable-data
+  Ki.prototype.animate = function (props, duration?, easing?, complete?) {
+    const options = extend(
+      {
+        duration: "_default",
+        easing: "_default",
+        complete,
+        queue: true,
+      },
+      typeof duration !== "object"
+        ? {
+            duration,
+            easing,
+          }
+        : duration
+    );
+
+    if (options.queue) {
+      const queueName = options.queue === true ? "fx" : options.queue;
+
+      this.each((elem) => {
+        if (typeof elem !== "object" && typeof elem !== "function") {
+          return void 0xa;
         }
-      : duration
-  );
 
-  if (options.queue) {
-    const queueName = options.queue === true ? "fx" : options.queue;
+        initWeakAnimate(elem, queueName);
 
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        storeWeakAnimate.get(elem)!.get(queueName)!.add({ props, options });
+
+        startTweenQueueInStore(elem, queueName);
+      });
+    } else {
+      // if options.queue == false: <-- no save to store
+      this.each((elem) => {
+        if (typeof elem !== "object" && typeof elem !== "function") {
+          return void 0xa;
+        }
+
+        const tweenProps = createTweensByProps(elem, props, options);
+
+        initWeakTweenPropsRunning(elem);
+
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        storeWeakTweenPropsRunning.get(elem)!.add(tweenProps);
+
+        startTweens(tweenProps.tweens);
+      });
+    }
+
+    return this;
+  };
+  // eslint-disable-next-line functional/immutable-data
+  Ki.prototype.delay = function (ms: number, queueName = "fx") {
     this.each((elem) => {
       if (typeof elem !== "object" && typeof elem !== "function") {
         return void 0xa;
@@ -363,41 +498,17 @@ Kijs.prototype.animate = function (props, duration, easing, complete) {
 
       initWeakAnimate(elem, queueName);
 
-      storeWeakAnimate.get(elem)!.get(queueName)!.add(props);
-
-      startTweenQueueInStore(elem, queueName);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      storeWeakAnimate
+        .get(elem)!
+        .get(queueName)!
+        .add(() => new Promise<void>((resolve) => setTimeout(resolve, ms)));
     });
-  } else {
-    // if options.queue == false: <-- no save to store
-    this.each((elem) => {
-      if (typeof elem !== "object" && typeof elem !== "function") {
-        return void 0xa;
-      }
 
-      const tweenProps = createTweensByProps(elem, props);
-
-      initWeakTweenPropsRunning(elem);
-
-      storeWeakTweenPropsRunning.get(elem)!.add(tweenProps);
-
-      startTweens(tweenProps.tweens);
-    });
-  }
-};
-Kijs.prototype.delay = function (ms: number) {
-  this.each((elem) => {
-    if (typeof elem !== "object" && typeof elem !== "function") {
-      return void 0xa;
-    }
-
-    initWeakAnimate(elem, queueName);
-
-    storeWeakAnimate
-      .get(elem)!
-      .get(queueName)!
-      .add(() => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-  });
-};
+    return this;
+  };
+}
 
 export type { Options };
 export default Tween;
+export { installer };
