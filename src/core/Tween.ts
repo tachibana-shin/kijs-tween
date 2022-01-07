@@ -409,6 +409,10 @@ function startTweenQueueInStore(elem: any, queueName: string): void {
         typeof argTween === "function"
           ? { promise: argTween() || Promise.resolve() }
           : createTweensByProps(elem, argTween.props, argTween.options);
+          
+      // hydration complete -> remove argTwen in task
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      storeWeakAnimate.get(elem)!.get(queueName).delete(argTween);
 
       initWeakTweenPropsRunning(elem);
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
