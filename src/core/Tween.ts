@@ -398,3 +398,6 @@ Kijs.prototype.delay = function (ms: number) {
       .add(() => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   });
 };
+
+export type { Options };
+export default Tween;
