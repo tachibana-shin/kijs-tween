@@ -1,6 +1,6 @@
 {
   "name": "kijs-tween",
-  "version": "0.0.1",
+  "version": "0.0.1-alpha1",
   "author": "Tachibana Shin <thanhnguyennguyen1995@gmail.com>",
   "main": "dist/kijs-tween.esm.js",
   "exports": {
@@ -51,7 +51,7 @@
     "typescript": "^4.2.4"
   },
   "scripts": {
-    "build": "rollup -c rollup.config.js",
+    "build": "rollup -c rollup.config.ts",
     "prepublishOnly": "yarn build",
     "docs": "typedoc src",
     "test:coverage": "jest",
