@@ -203,7 +203,7 @@ function createTweensByProps(el:any, props: {
     })*/
     
     tweens[0]?.onStart(() => {
-      displayBackup = getDisplayElementInCache()
+      displayBackup = getDisplayElementInCache() // never "none"
       let 
 				display = css( elem, "display" );
 		if ( display === "none" ) {
@@ -224,8 +224,11 @@ function createTweensByProps(el:any, props: {
       showHide([ elem ], true)
     })
     promise.finally(() => {
+      if (isHidden) {
         elem.style.display = displayBackup;
-      
+      } else {
+        showHide([ elem ], false)
+      }
     })
   }
   const promise = Promise.all(tweens)
