@@ -412,7 +412,7 @@ function startTweenQueueInStore(elem: any, queueName: string): void {
           
       // hydration complete -> remove argTwen in task
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      storeWeakAnimate.get(elem)!.get(queueName).delete(argTween);
+      storeWeakAnimate.get(elem)!.get(queueName)!.delete(argTween);
 
       initWeakTweenPropsRunning(elem);
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
