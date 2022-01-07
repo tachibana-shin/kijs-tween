@@ -11,6 +11,7 @@ const banner = `/**
  * MIT License
  * ${name} version ${version}
  * */`;
+const external = ["@tweenjs/tween.js", "kijs"];
 
 const options = [
   {
@@ -72,6 +73,7 @@ const options = [
       //   exports: "auto",
       // },
     ],
+    external,
   },
   {
     input: "src/index.ts",
@@ -120,6 +122,7 @@ const options = [
         strict: true,
       },
     ],
+    external,
   },
   {
     input: "src/index.ts",
@@ -130,6 +133,7 @@ const options = [
       },
     ],
     plugins: [dts()],
+    external,
   },
 ];
 
