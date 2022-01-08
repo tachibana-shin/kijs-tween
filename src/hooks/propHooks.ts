@@ -24,7 +24,7 @@ hooks.set("_default", {
     }
 
     const result = css(tween.elem, tween.prop, "");
-
+    
     // Empty strings, null, undefined and "auto" are converted to 0.
     return !result || result === "auto" ? 0 : result;
   },
