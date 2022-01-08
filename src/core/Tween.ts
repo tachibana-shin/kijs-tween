@@ -692,11 +692,15 @@ function installer(Ki: typeof Kijs) {
     }
   );
 
-  function stopAllTweenRunning(elem: any, queueName: string): void {
+  function stopAllTweenRunning(elem: any, queueName: string, jumpToEnd: boolean): void {
     storeWeakTweenPropsRunning.get(elem)?.forEach((tweenProps) => {
       if (tweenProps.name === queueName) {
         tweenProps.tweens?.forEach((tween) => {
-          tween.tween.duration(0);
+          if (jumpToEnd) {
+            tween.tween.duration(0);
+          } else {
+            tween.tween.stop();
+          }
         });
         tweenProps.hooks?.stop?.();
       }
@@ -730,7 +734,7 @@ function installer(Ki: typeof Kijs) {
 
     return this.each((elem) => {
       // stop tween running
-      stopAllTweenRunning(elem, queueName);
+      stopAllTweenRunning(elem, queueName, true);
 
       // stop all complete;
 
@@ -772,7 +776,7 @@ function installer(Ki: typeof Kijs) {
 
     return this.each((elem) => {
       // stop tween running
-      stopAllTweenRunning(elem, queueName as string);
+      stopAllTweenRunning(elem, queueName as string, jumpToEnd ?? false);
       // stop all complete;
 
       if (jumpToEnd) {
