@@ -629,6 +629,7 @@ function installer(Ki: typeof Kijs) {
     return this.filter(isHiddenWithinTree)
       .css("opacity", 0)
       .show()
+      .end()
       .animate(
         { opacity: to },
         speed,
